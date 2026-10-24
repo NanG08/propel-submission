@@ -1,0 +1,6 @@
+# .gitignore
+.env
+__pycache__/
+*.db
+.pytest_cache/
+Propel_Full_Stack_AI_Engineer_Assignment.pdf

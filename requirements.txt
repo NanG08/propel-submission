@@ -1,0 +1,8 @@
+# requirements.txt
+fastapi
+uvicorn
+pydantic>=2.0
+pytest
+httpx
+google-genai
+openai
