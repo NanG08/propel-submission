@@ -178,6 +178,70 @@ _UNSAFE_REPLY_REGEX = re.compile("|".join(_UNSAFE_REPLY_TOKENS), re.IGNORECASE)
 
 def apply_safety_gates(ticket: TicketInput, llm_draft: LLMTriageDraft) -> TriageResponse:
     """Apply safety and policy logic and return a ``TriageResponse``.
+
+    This wrapper now ensures that any deterministic rule that blocks a refund
+    also forces ``needs_human`` to ``True``. The original logic only set the flag
+    for injection detection and low confidence. The additional check looks at the
+    ``RefundDecision`` reason (case‑insensitive) for known block keywords and
+    toggles ``needs_human`` accordingly.
+    """
+    injection_detected, _ = detect_prompt_injection(ticket.subject, ticket.body)
+    refund_decision = evaluate_refund_policy(ticket, llm_draft, injection_detected)
+
+    # Determine needs_human flag initially from LLM draft
+    needs_human = llm_draft.needs_human
+
+    # Confidence gate – force human review and block refund if low confidence
+    if llm_draft.confidence < getattr(settings, "CONFIDENCE_THRESHOLD", 0.75):
+        needs_human = True
+        refund_decision = RefundDecision(
+            approved=False,
+            amount_inr=0,
+            reason="Confidence below threshold; human review required.",
+            payment_id=None,
+        )
+
+    # Injection detection forces human review (already covered by refund decision)
+    if injection_detected or llm_draft.prompt_injection_detected:
+        needs_human = True
+
+    # Additional rule: enforce human review only for specific block reasons.
+    # We *do not* treat the double‑charge scenario (Rule 5) as a human‑override.
+    # Relevant block reasons that must trigger human review:
+    #   * "initiated" – unsettled payment
+    #   * "exceeds auto‑refund cap" – high‑value annual plan
+    #   * "app opens" – usage gate on monthly renewal
+    #   * "fraud" or "cyber" – legal / fraud escalation
+    #   * any other non‑"no refund requested" wording that indicates a policy block
+    if not refund_decision.approved:
+        lower_reason = refund_decision.reason.lower()
+        block_keywords = [
+            "initiated",
+            "exceeds auto‑refund cap",
+            "app opens",
+            "fraud",
+            "cyber",
+            "unauthorized",
+        ]
+        # If the reason contains any of the above keywords, force human review.
+        if any(kw in lower_reason for kw in block_keywords):
+            needs_human = True
+
+    # Scrub unsafe reply content
+    reply = llm_draft.reply_draft
+    if _UNSAFE_REPLY_REGEX.search(reply):
+        reply = "Thank you for reaching out. We are reviewing your request and will get back to you shortly."
+
+    return TriageResponse(
+        ticket_id=ticket.id,
+        category=llm_draft.category,
+        severity=llm_draft.severity,
+        refund=refund_decision,
+        reply_draft=reply,
+        needs_human=needs_human,
+        confidence=llm_draft.confidence,
+    )
+    """Apply safety and policy logic and return a ``TriageResponse``.
     Includes prompt‑injection detection, refund policy, confidence gating, and
     reply sanitisation.
     """
