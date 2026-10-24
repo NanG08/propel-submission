@@ -1,0 +1,22 @@
+{
+    "T-1001": {
+        "category": "REFUND_REQUEST",
+        "severity": "P1_HIGH",
+        "user_wants_refund": true,
+        "reply_draft": "We have processed your refund of Rs 249. Please check your account.",
+        "needs_human": false,
+        "confidence": 0.98,
+        "prompt_injection_detected": false,
+        "reasoning": "User explicitly requests refund and purchase was successful."
+    },
+    "T-1005": {
+        "category": "ACCOUNT_ISSUE",
+        "severity": "P2_MEDIUM",
+        "user_wants_refund": false,
+        "reply_draft": "Your payment is currently pending and will be settled soon.",
+        "needs_human": true,
+        "confidence": 0.85,
+        "prompt_injection_detected": false,
+        "reasoning": "Payment status is initiated; need human review."
+    }
+}
